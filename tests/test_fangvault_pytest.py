@@ -2,10 +2,10 @@ import pytest
 import json
 import base64
 import codecs
-import importlib.util
+import importlib.util, os
 
 # ── Load module ───────────────────────────────────────────────────────────────
-spec = importlib.util.spec_from_file_location("defang", "FangVault.py")
+spec = importlib.util.spec_from_file_location("defang", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "socgear", "fangvault.py"))
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 

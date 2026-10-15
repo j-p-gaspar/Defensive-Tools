@@ -1,275 +1,138 @@
-# SOC Analyst Investigation Toolkit
+# socgear - SOC Analyst Toolkit
 
-A collection of lightweight Python CLI utilities built for **Security Operations Center (SOC) analysts** to accelerate common investigative tasks — IOC defanging, multi-layer decoding, IP extraction, and Windows authentication log decoding.
+Command-line utilities for common SOC investigation tasks. Standard library
+only, Python 3.10+. Every tool reads arguments, files or stdin, prints a
+**plain-text report that pastes cleanly into a ticket**, and returns a useful
+exit code, so they work in pipelines and scripts.
 
----
+| Command | Tool | Purpose |
+|---|---|---|
+| `fangvault` | `socgear/fangvault.py` | Defang / refang IOCs, decode layered obfuscation, webshell/RCE scan |
+| `ip_parser` | `socgear/ipparser.py` | Extract unique, validated IPv4/IPv6 (handles defanged + CIDR) |
+| `logonlens` | `socgear/logonlens.py` | Decode Windows event IDs, NTSTATUS, Kerberos codes, logon types |
+| `iocx` | `socgear/iocx.py` | Extract IPs, URLs, domains, emails, hashes, CVEs |
+| `tsconv` | `socgear/tsconv.py` | Convert epoch / FILETIME / WebKit / ISO timestamps to UTC |
+| `hashfile` | `socgear/hashfile.py` | MD5 / SHA1 / SHA256 of files (offline, VT link only) |
+| `emailhdr` | `socgear/emailhdr.py` | Parse email headers: hops, SPF/DKIM/DMARC, spoofing hints |
+| `socgear` | `socgear/cli.py` | Umbrella: `socgear ip ...`, `socgear logon ...` |
 
-## 📁 Repository Structure
+## Install
 
-```text
-SOC-Toolkit/
-├── FangVault.py       # URL & IP defanger, multi-layer decoder, and payload analyzer
-├── IP_Parser.py       # IPv4 extractor and deduplicator from raw text
-├── LogonLens.py       # Windows Event ID & hex status code decoder
-├── ToolKit.sh         # Interactive Bash menu launcher
-├── Test_FangVault.py  # Unit test suite for FangVault capabilities
-└── README.md
+```bash
+git clone https://github.com/j-p-gaspar/Defensive-Tools.git
+cd Defensive-Tools
+pip install .            # installs the commands above
+# or run without installing:
+python -m socgear ip -f firewall.log
 ```
 
----
+`ToolKit.sh` is an optional interactive menu (Linux/macOS/WSL/Git Bash).
 
-## 🛠️ Tools Overview
+## Common options
 
-### 1. Cyber Defanger & Decoder — `FangVault.py`
+Every tool takes input as arguments, `-f FILE` (repeatable, `-` = stdin) or a
+pipe, and shares these output options:
 
-Safely document, share, and inspect malicious indicators without risking accidental execution by analysts or end-users.
-
-#### How It Works
-
-- Converts `http` / `https` → `hxxp` / `hxxps`
-- Wraps URL separators in brackets:
-  - `hxxp[://]malicious[.]com`
-- Detects and defangs IPv4 and IPv6 addresses:
-  - `192[.]168[.]1[.]1`
-- Validates already-defanged input and attempts to correct malformed indicators.
-- Refangs defanged indicators back into their live form using the `fang` command.
-- Automatically unwraps chained encodings, such as:
-  - Base64 → URL encoding
-
-#### Advanced Payload & IOC Analysis
-
-`FangVault.py` supports analysis and decoding of several common encoding and obfuscation techniques, as well as threat-hunting scans.
-
-**Decoding:**
-
-- Base64
-- Base32
-- Base16 / Hex
-- ROT13
-- JWT (JSON Web Tokens)
-- URL encoding
-- HTML entities
-- Unicode escapes
-
-**Domain Analysis:**
-
-- Punycode / IDN decoding
-- Homograph attack warnings
-
-**Path Traversal & Null-Byte Detection:**
-
-- `../`
-- `%2F`
-- `%00`
-
-**Webshell & RCE Scanning:**
-
-Scans decoded URL components for high-risk command patterns, including:
-
-- PowerShell scripting
-- Command execution
-- Tunneling
-- WMI management
-
-Available through the `shell` command.
-
-**IP Network Classification:**
-
-Evaluates IP addresses and classifies them as:
-
-- Private
-- Public
-- Loopback
-- Multicast
-- Reserved
-
-Available through the `label` command.
-
-**File Intent Detection:**
-
-Flags potentially dangerous executable file types found within download links.
-
-#### Commands
-
-| Command | Description |
+| Option | Meaning |
 |---|---|
-| `<url or ip>` | Defang a fresh indicator and add it to session history |
-| `fang` | Reverse all session indicators back to live form |
-| `decode` | Decode and analyze components of all URLs in session history |
-| `decode <url>` | Perform an inline full decoding and analysis of a specific URL |
-| `shell` | Scan all decoded URLs in session history for Webshell and RCE patterns |
-| `shell <url>` | Perform an inline Webshell / RCE pattern scan on a specific URL |
-| `label` | Evaluate and display the IP network context for IPs in session history |
-| `undo` | Remove the last added indicator from session history |
-| `clear` | Reset all session history |
-| `exit` / `quit` | Terminate the tool |
+| `--format text\|md\|json\|csv` | Report format. `text` (default) is plain ASCII; `md` gives Markdown tables |
+| `-o FILE` | Write the report to a file |
+| `--no-color` | Never emit ANSI colour (also honours `NO_COLOR`; colour is only used on a TTY) |
+| `--no-timestamp` | Omit the generated time for reproducible output |
+| `-q` | (`ip_parser`, `iocx`, `hashfile`) bare values only, one per line |
 
----
+Results go to **stdout**; warnings and errors go to **stderr**, so
+`tool > report.txt` always captures a clean report.
 
-### 2. IP Parser — `IP_Parser.py`
+**Exit codes:** `0` results found, `1` nothing found, `2` error / bad input.
 
-Rapidly extract all unique IPv4 addresses from unstructured text such as:
-
-- Firewall logs
-- Email headers
-- Threat intelligence reports
-- Raw packet dumps
-
-#### How It Works
-
-- Uses a regular expression pattern to identify IPv4 addresses in arbitrary text.
-- Automatically removes duplicate addresses using a Python `set`.
-- Returns a clean list of unique IPv4 addresses.
-- Displays the total number of unique addresses found.
-- Supports looping input, allowing multiple data chunks to be processed in a single session.
-
----
-
-### 3. LogonLens — `LogonLens.py`
-
-Translate cryptic Windows Event IDs and hexadecimal NTSTATUS/Kerberos status codes into human-readable security context during incident investigations.
-
-#### How It Works
-
-Raw log data containing hexadecimal status codes or Windows Event IDs is automatically parsed and matched against a built-in reference database.
-
-#### Coverage
-
-| Category | Examples |
-|---|---|
-| Authentication Errors | `0xC0000064`, `0xC000006A`, `0xC0000234` |
-| Kerberos Errors | `0x6`, `0x17`, `0x25` |
-| Logon / Logoff Events | `4624`, `4625`, `4634`, `4648` |
-| Account Management | `4720`, `4725`, `4740` |
-| Kerberos / NTLM | `4768`, `4769`, `4771`, `4776` |
-| System & Policy | `1102`, `4719`, `4732` |
-
-#### Features
-
-- Automatic extraction of Event IDs and status codes from raw log snippets.
-- Inline database search using:
-  ```text
-  search [term]
-  ```
-- Session-scoped analysis tracking discovered events and errors.
-- Differentiates between:
-  - `[EVENTS]`
-  - `[ERRORS]`
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Python 3.x
-- A terminal emulator with ANSI color support:
-  - Windows Terminal
-  - PowerShell
-  - VS Code Terminal
-  - iTerm2
-  - Linux terminals
-  - macOS Terminal
-
-> **Note:** Classic Windows CMD may not render ANSI colors correctly. For the best experience on Windows, use Windows Terminal or PowerShell.
-
----
-
-## 📦 Installation
-
-No external Python dependencies are required. All scripts use the Python standard library only.
+## Examples
 
 ```bash
-git clone https://github.com/your-username/soc-analyst-toolkit.git
-cd soc-analyst-toolkit
+# IPs from a firewall log, public only, numerically sorted
+ip_parser -f fw.log --public-only --sort
+
+# Pipe straight into other tools
+cat alerts.txt | ip_parser -q | sort -u
+
+# Decode a failed-logon dump and write a ticket-ready report
+logonlens -f security.txt --threshold 10 --format md -o 4625-report.md
+logonlens 4625 0xC000006A "Logon Type: 3"
+logonlens --search lockout
+
+# Defang for sharing, decode, and scan in one report
+fangvault triage -f iocs.txt --format md -o triage.md
+fangvault decode "http://x.io/?q=aGVsbG8gd29ybGQ="
+fangvault defang http://evil.com/a.exe 8.8.8.8
+
+# IOCs from a report, defanged
+iocx -f threat-report.txt --defang
+
+# Timestamps
+tsconv 133500000000000000 1700000000 "2024-03-01 10:00:00"
+
+# Files and email
+hashfile suspicious.exe
+emailhdr -f suspicious.eml
 ```
 
----
+### Sample report (`logonlens`)
 
-## ▶️ Usage
+```
+LogonLens - Windows authentication analysis
+Source   : arguments
+------------------------------------------------------------------------
+Events (2)
+  Event ID  Description                     Severity    Count
+  --------  ------------------------------  ----------  -----
+  1102      Security audit log was cleared  [CRITICAL]  1
+  4625      Failed logon                    [WARN]      1
 
-You can run the individual Python utilities directly or use the interactive menu launcher.
+Status / error codes (1)
+  Code        Table     Field  Meaning                                              Count
+  ----------  --------  -----  ---------------------------------------------------  -----
+  0xC000006A  NTSTATUS  -      STATUS_WRONG_PASSWORD - Known user, wrong password.  1
+------------------------------------------------------------------------
+Summary: 2 event hits (2 unique), 1 status codes, 1 high/critical
+```
 
-### Using the Menu Launcher
+## Tool notes
 
-#### Linux / macOS
+**fangvault** - subcommands `defang`, `fang`, `decode`, `shell`, `label`,
+`triage`; `fangvault -i` opens a plain interactive prompt. Decodes Base64/32/16,
+Base64url, ROT13, JWT, URL, HTML entities, Unicode escapes and chains of them,
+flags IDN/homograph hosts, path traversal, null bytes, dangerous file types and
+webshell/RCE command patterns. Only the URL scheme is rewritten when defanging
+(`/http-check` in a path is left alone).
+
+**ip_parser** - validates octets (`999.1.1.1` is rejected), accepts defanged
+input (`1[.]2[.]3[.]4`), IPv6 and CIDR, classifies each address
+(public/private/loopback/link-local/multicast/reserved) and counts
+occurrences. Filters: `--public-only`, `--only-private`, `--no-ipv6`.
+
+**logonlens** - matches IDs and codes in context (`EventID`, `Status`,
+`SubStatus`, `Failure Code`, `Logon Type`) so words, years and ports are not
+mistaken for codes. Summarises top source addresses and accounts, and raises
+findings for audit-log clearing and failed-logon bursts (`--threshold`).
+Reads UTF-8 and UTF-16 exports. The reference data lives in
+`socgear/data/logonlens.json` and is easy to extend.
+
+**iocx** - refangs `hxxp`, `[.]`, `[@]`, `(dot)` before extracting; file names
+such as `payload.exe` are not reported as domains.
+
+## Tests
 
 ```bash
-chmod +x ToolKit.sh
-./ToolKit.sh
+pip install pytest
+pytest -q
 ```
 
-#### Windows
+## Safety
 
-`ToolKit.sh` requires a Bash-compatible environment such as:
+`fangvault fang` produces **live** indicators. Do not open refanged URLs in a
+browser. No tool makes network requests; `hashfile` only prints a VirusTotal
+link.
 
-- WSL
-- Git Bash
-- MSYS2
+## Author
 
-Alternatively, run the Python tools directly.
-
----
-
-### Running Scripts Directly
-
-#### FangVault
-
-Defang malicious URLs/IPs and decode payloads:
-
-```bash
-python3 FangVault.py
-```
-
-#### IP Parser
-
-Extract unique IPv4 addresses from raw log data:
-
-```bash
-python3 IP_Parser.py
-```
-
-#### LogonLens
-
-Decode Windows authentication failures and Event IDs:
-
-```bash
-python3 LogonLens.py
-```
-
----
-
-## 💻 Compatibility
-
-| Tool | Windows | Linux | macOS |
-|---|:---:|:---:|:---:|
-| `FangVault.py` | ✅ | ✅ | ✅ |
-| `IP_Parser.py` | ✅ | ✅ | ✅ |
-| `LogonLens.py` | ✅ | ✅ | ✅ |
-| `ToolKit.sh` | ⚠️ WSL / Bash | ✅ | ✅ |
-
----
-
-## 🔐 Security Use Cases
-
-This toolkit is designed to assist SOC analysts and security practitioners with common investigation tasks, including:
-
-- IOC normalization and documentation
-- Malicious URL analysis
-- IP address extraction
-- Encoded payload inspection
-- Authentication failure investigation
-- Windows Event Log analysis
-- Kerberos and NTLM troubleshooting
-- Threat intelligence enrichment
-- Initial incident triage
-
-> **Warning:** The `fang` functionality converts defanged indicators back into potentially active URLs or IP-based indicators. Exercise caution when handling or opening refanged content.
-
----
-
-## 👤 Author
-
-**João Gaspar**
-
-Security-focused utilities for SOC analysis, incident response, and threat intelligence workflows.
+João Gaspar

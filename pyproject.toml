@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "socgear"
+version = "1.0.0"
+description = "Command-line toolkit for SOC analysts: defang/decode IOCs, extract IPs/IOCs, decode Windows logon events."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Joao Gaspar" }]
+dependencies = []
+
+[project.scripts]
+socgear   = "socgear.cli:main"
+fangvault = "socgear.fangvault:main"
+ip_parser = "socgear.ipparser:main"
+logonlens = "socgear.logonlens:main"
+iocx      = "socgear.iocx:main"
+tsconv    = "socgear.tsconv:main"
+hashfile  = "socgear.hashfile:main"
+emailhdr  = "socgear.emailhdr:main"
+
+[tool.setuptools]
+packages = ["socgear"]
+
+[tool.setuptools.package-data]
+socgear = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
